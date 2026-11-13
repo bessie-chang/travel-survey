@@ -38,8 +38,7 @@ with tab1:
     st.subheader("一、基本資料與參加意願")
     col1, col2 = st.columns(2)
     with col1:
-        dept = st.selectbox("所屬部門 *", ["管理部", "財務會計部", "業務部", "行銷企劃部", "研發技術部", "生產製造部", "其他"])
-        emp_id = st.text_input("員工編號 *")
+                emp_id = st.text_input("員工編號 *")
     with col2:
         name = st.text_input("真實姓名（保險與機票核對用） *")
 
