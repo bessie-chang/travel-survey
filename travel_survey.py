@@ -7,13 +7,14 @@ from datetime import datetime, timezone, timedelta
 st.set_page_config(page_title="2027 員工國外旅遊意願調查", page_icon="✈️", layout="centered")
 
 # ==========================================
-# ⏰ 設定問卷截止時間（台灣時間 UTC+8）
+# ⏰ 設定問卷開放與截止時間（台灣時間 UTC+8）
 # 格式：YYYY-MM-DD HH:MM（請依實際需求修改引號內的時間）
-START_STR = "2026-11-13 09:00"     # 開放填寫時間
-DEADLINE_STR = "2026-11-14 17:00"
+START_STR = "2026-11-13 09:00"     # 自動開放填寫時間
+DEADLINE_STR = "2026-11-24 17:00"  # 自動截止關閉時間
 # ==========================================
 
 TW_TZ = timezone(timedelta(hours=8))
+START_TIME = datetime.strptime(START_STR, "%Y-%m-%d %H:%M").replace(tzinfo=TW_TZ)
 DEADLINE = datetime.strptime(DEADLINE_STR, "%Y-%m-%d %H:%M").replace(tzinfo=TW_TZ)
 now_tw = datetime.now(TW_TZ)
 
@@ -39,11 +40,19 @@ tab1, tab2 = st.tabs(["📝 填寫調查表", "📊 統計結果 (主辦人專�
 with tab1:
     st.title("✈️ 2027 年度員工國外旅遊意願調查")
 
-    # 判斷是否已超過截止時間
+    # 1. 尚未到開放時間
     if now_tw < START_TIME:
-        st.warning(f"⏳ **本問卷調查將於 {START_STR} 準時開放填寫**，屆時請重新整理網頁即可開始作答！")
+        st.warning(
+            f"⏳ **本問卷調查將於 {START_STR} 準時開放填寫**\n\n"
+            f"開放期間：{START_STR} ～ {DEADLINE_STR}，屆時請重新整理網頁即可開始作答！"
+        )
+    # 2. 已超過截止時間（自動關閉表單）
     elif now_tw > DEADLINE:
-        st.error(f"⏰ **本問卷調查已於 {DEADLINE_STR} 截止**，感謝大家的熱烈參與！\n\n若有特殊補登記需求，請直接聯繫活動主辦人。")
+        st.error(
+            f"⏰ **本問卷調查已於 {DEADLINE_STR} 截止**，感謝大家的熱烈參與！\n\n"
+            "若有特殊補登記需求，請直接聯繫活動主辦人。"
+        )
+    # 3. 開放期間內：正常顯示填寫表單
     else:
         st.info(
             "各位同仁大家好：\n\n"
@@ -103,9 +112,11 @@ with tab1:
 
         st.divider()
         if st.button("🚀 送出問卷", type="primary", use_container_width=True):
-            # 送出瞬間再次檢查是否壓線超時
-            if datetime.now(TW_TZ) > DEADLINE:
-                st.error(f"⚠️ 抱歉，剛剛已超過截止時間（{DEADLINE_STR}），系統已停止收件！")
+            current_check = datetime.now(TW_TZ)
+            if current_check < START_TIME:
+                st.error(f"⚠️ 問卷尚未開放（開放時間：{START_STR}）！")
+            elif current_check > DEADLINE:
+                st.error(f"⚠️ 抱歉，剛剛已超過截止時間（{DEADLINE_STR}），系統已自動關閉收件！")
             elif not name.strip() or not emp_id.strip():
                 st.error("⚠️ 請填寫「姓名」與「員工編號」後再送出！")
             elif intent.startswith("是，超級期待") and len(selected_dests) == 0:
@@ -118,7 +129,7 @@ with tab1:
                     df_existing = pd.DataFrame(records)
 
                     new_row = pd.DataFrame([{
-                        "填寫時間": datetime.now(TW_TZ).strftime("%Y-%m-%d %H:%M:%S"),
+                        "填寫時間": current_check.strftime("%Y-%m-%d %H:%M:%S"),
                         "部門": dept,
                         "姓名": name.strip(),
                         "工號": emp_id.strip().upper(),
