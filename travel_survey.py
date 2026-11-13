@@ -9,7 +9,8 @@ st.set_page_config(page_title="2027 員工國外旅遊意願調查", page_icon="
 # ==========================================
 # ⏰ 設定問卷截止時間（台灣時間 UTC+8）
 # 格式：YYYY-MM-DD HH:MM（請依實際需求修改引號內的時間）
-DEADLINE_STR = "2026-11-27 17:00"
+START_STR = "2026-11-13 09:00"     # 開放填寫時間
+DEADLINE_STR = "2026-11-14 17:00"
 # ==========================================
 
 TW_TZ = timezone(timedelta(hours=8))
@@ -39,7 +40,9 @@ with tab1:
     st.title("✈️ 2027 年度員工國外旅遊意願調查")
 
     # 判斷是否已超過截止時間
-    if now_tw > DEADLINE:
+    if now_tw < START_TIME:
+        st.warning(f"⏳ **本問卷調查將於 {START_STR} 準時開放填寫**，屆時請重新整理網頁即可開始作答！")
+    elif now_tw > DEADLINE:
         st.error(f"⏰ **本問卷調查已於 {DEADLINE_STR} 截止**，感謝大家的熱烈參與！\n\n若有特殊補登記需求，請直接聯繫活動主辦人。")
     else:
         st.info(
