@@ -1,14 +1,27 @@
 import streamlit as st
 import pandas as pd
+import gspread
+from google.oauth2.service_account import Credentials
 from datetime import datetime
-from streamlit_gsheets import GSheetsConnection
 
 st.set_page_config(page_title="員工國外旅遊意願調查", page_icon="✈️", layout="centered")
 
 DESTINATIONS = ["日本－四國", "越南－峴港", "馬來西亞－馬六甲"]
 
-# 連接 Google Sheets（網址設定在 Streamlit Cloud 後台的 Secrets）
-conn = st.connection("gsheets", type=GSheetsConnection)
+@st.cache_resource
+def get_worksheet():
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive"
+    ]
+    creds = Credentials.from_service_account_info(
+        st.secrets["gcp_service_account"], scopes=scopes
+    )
+    client = gspread.authorize(creds)
+    sheet = client.open_by_url(st.secrets["sheet_url"]).sheet1
+    return sheet
+
+sheet = get_worksheet()
 
 tab1, tab2 = st.tabs(["📝 填寫調查表", "📊 統計結果 (主辦人專用)"])
 
@@ -75,30 +88,33 @@ with tab1:
         elif intent != "不克參加" and not travel_month:
             st.error("⚠️ 請至少選擇一個期望出發的月份！")
         else:
-            # 讀取目前 Google 試算表資料
-            df_existing = conn.read(ttl=0).dropna(how="all")
-            new_row = pd.DataFrame([{
-                "填寫時間": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "部門": dept,
-                "姓名": name.strip(),
-                "工號": emp_id.strip().upper(),
-                "參加意願": intent,
-                "總人數": total_people,
-                "第一志願(3分)": rank1,
-                "第二志願(2分)": rank2,
-                "第三志願(1分)": rank3,
-                "期望出發月份": ", ".join(travel_month) if travel_month else "",
-                "護照效期狀態": passport_status,
-                "備註與眷屬資訊": notes.strip()
-            }])
+            with st.spinner("資料傳送中，請稍候..."):
+                records = sheet.get_all_records()
+                df_existing = pd.DataFrame(records)
 
-            if not df_existing.empty and "工號" in df_existing.columns:
-                df_existing = df_existing[df_existing["工號"].astype(str) != emp_id.strip().upper()]
-            df_updated = pd.concat([df_existing, new_row], ignore_index=True)
+                new_row = pd.DataFrame([{
+                    "填寫時間": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "部門": dept,
+                    "姓名": name.strip(),
+                    "工號": emp_id.strip().upper(),
+                    "參加意願": intent,
+                    "總人數": total_people,
+                    "第一志願(3分)": rank1,
+                    "第二志願(2分)": rank2,
+                    "第三志願(1分)": rank3,
+                    "期望出發月份": ", ".join(travel_month) if travel_month else "",
+                    "護照效期狀態": passport_status,
+                    "備註與眷屬資訊": notes.strip()
+                }])
 
-            # 寫回 Google 試算表
-            conn.update(data=df_updated)
-            st.success(f"✅ 感謝 {name} 的填寫！您的資料已成功送出（若重複填寫將自動以最新送出紀錄為準）。")
+                if not df_existing.empty and "工號" in df_existing.columns:
+                    df_existing = df_existing[df_existing["工號"].astype(str) != emp_id.strip().upper()]
+                df_updated = pd.concat([df_existing, new_row], ignore_index=True).fillna("")
+
+                sheet.clear()
+                sheet.update([df_updated.columns.values.tolist()] + df_updated.values.tolist())
+
+            st.success(f"✅ 感謝 {name} 的填寫！您的資料已成功儲存（若重複填寫將自動以最新紀錄為準）。")
             st.balloons()
 
 with tab2:
@@ -106,7 +122,8 @@ with tab2:
     password = st.text_input("請輸入管理員密碼檢視統計結果（預設密碼：8888）", type="password")
 
     if password == "8888":
-        df = conn.read(ttl=0).dropna(how="all")
+        records = sheet.get_all_records()
+        df = pd.DataFrame(records)
         if df.empty:
             st.warning("目前尚無任何填答紀錄。")
         else:
@@ -114,7 +131,7 @@ with tab2:
             m1, m2, m3 = st.columns(3)
             m1.metric("已填寫人數", f"{len(df)} 人")
             m2.metric("預計參加員工", f"{len(join_df)} 人")
-            m3.metric("含眷屬總人數", f"{int(join_df['總人數'].sum())} 人")
+            m3.metric("含眷屬總人數", f"{int(pd.to_numeric(join_df['總人數']).sum())} 人")
 
             st.markdown("### 🏆 旅遊地點順位積分排行")
             scores = {dest: {"第一志願票數": 0, "第二志願票數": 0, "第三志願票數": 0, "總積分": 0} for dest in DESTINATIONS}
